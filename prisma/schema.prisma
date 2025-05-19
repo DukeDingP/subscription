@@ -1,0 +1,38 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  checkoutId    String?
+  password      String
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  subscription  Subscription?
+}
+
+model Subscription {
+  id             String   @id @default(cuid())
+  userEmail      String   @unique // 直接绑定 User.email
+  user           User     @relation(fields: [userEmail], references: [email], onDelete: Cascade)
+  status         String   // active, canceled, expired
+  //plan           String   // pro, business
+  //billingCycle   String   // monthly, yearly
+  customerId     String   @unique
+  subscriptionId String   @unique // Creem subscription ID
+  orderId        String   @unique // Creem order ID
+  checkoutId     String   @unique // Creem checkout ID
+  productId      String   // Creem product ID
+  startDate      DateTime @default(now())
+  endDate        DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
