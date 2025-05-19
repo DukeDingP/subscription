@@ -2,9 +2,16 @@
 
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 
 export default function Navbar() {
   const { data: session } = useSession();
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    await signOut({ redirect: false });
+    router.push('/');
+  };
 
   return (
     <nav className="bg-white shadow-lg">
@@ -25,7 +32,7 @@ export default function Navbar() {
                   订阅
                 </Link>
                 <button
-                  onClick={() => signOut()}
+                  onClick={handleSignOut}
                   className="ml-4 text-gray-700 hover:text-gray-900 px-3 py-2"
                 >
                   退出

@@ -24,8 +24,8 @@ model Subscription {
   userEmail      String   @unique // 直接绑定 User.email
   user           User     @relation(fields: [userEmail], references: [email], onDelete: Cascade)
   status         String   // active, canceled, expired
-  //plan           String   // pro, business
-  //billingCycle   String   // monthly, yearly
+  plan           String   // free, pro, business
+  billingCycle   String   // monthly, yearly
   customerId     String   @unique
   subscriptionId String   @unique // Creem subscription ID
   orderId        String   @unique // Creem order ID
