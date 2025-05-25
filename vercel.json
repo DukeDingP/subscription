@@ -1,8 +1,4 @@
 {
-  "buildCommand": "prisma generate && npm run build",
-  "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "framework": "nextjs",
   "env": {
     "CREEM_API_BASE_URL":"CREEM_API_BASE_URL",
     "CREEM_API_KEY":"CREEM_API_KEY",
