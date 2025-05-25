@@ -20,7 +20,7 @@ const transporter = nodemailer.createTransport({
 });
 
 // 验证邮件服务器连接
-transporter.verify(function (error, success) {
+transporter.verify(function (error) {
   if (error) {
     console.error('SMTP connection error:', error);
   } else {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '../auth/[...nextauth]/route';
+import { authOptions } from '../auth/[...nextauth]/auth.config';
 import { prisma } from '@/lib/prisma';
 
 const CREEM_API_BASE_URL = process.env.CREEM_API_BASE_URL;

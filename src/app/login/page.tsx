@@ -32,7 +32,7 @@ export default function LoginPage() {
         router.push('/');
         router.refresh();
       }
-    } catch (error) {
+    } catch {
       setError('登录时发生错误');
     } finally {
       setLoading(false);
@@ -43,7 +43,7 @@ export default function LoginPage() {
     try {
       setLoading(true);
       await signIn('google', { callbackUrl: '/' });
-    } catch (error) {
+    } catch {
       setError('谷歌登录时发生错误');
       setLoading(false);
     }
@@ -53,7 +53,7 @@ export default function LoginPage() {
     try {
       setLoading(true);
       await signIn('github', { callbackUrl: '/' });
-    } catch (error) {
+    } catch {
       setError('GitHub登录时发生错误');
       setLoading(false);
     }

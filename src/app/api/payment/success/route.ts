@@ -1,8 +1,5 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import crypto from 'crypto';
-
-const CREEM_API_KEY = process.env.CREEM_API_KEY;
 
 // 产品 ID 配置
 const PRODUCT_IDS = {
