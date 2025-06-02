@@ -3,13 +3,12 @@ import { Inter } from 'next/font/google';
 import { getServerSession } from 'next-auth';
 import { authOptions } from './api/auth/[...nextauth]/auth.config';
 import SessionProvider from '@/components/SessionProvider';
-import Navbar from '@/components/Navbar';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: '订阅系统',
-  description: '一个简单的订阅管理系统',
+  title: 'Lalaland - AI图像创意平台',
+  description: 'Lalaland是一个AI图像创意生成平台，帮助您实现创意想法',
 };
 
 export default async function RootLayout({
@@ -21,12 +20,13 @@ export default async function RootLayout({
 
   return (
     <html lang="zh">
+      <head>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
+        <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
+      </head>
       <body className={inter.className}>
         <SessionProvider session={session}>
-          <Navbar />
-          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            {children}
-          </main>
+          {children}
         </SessionProvider>
       </body>
     </html>

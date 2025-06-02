@@ -3,21 +3,21 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
 
 export default function RegisterPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
-
-    const formData = new FormData(e.currentTarget);
-    const name = formData.get('name') as string;
-    const email = formData.get('email') as string;
-    const password = formData.get('password') as string;
 
     try {
       const response = await fetch('/api/register', {
@@ -51,80 +51,252 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            创建新账户
-          </h2>
+    <div className="register-page">
+      <div className="register-container">
+        <div className="register-header">
+          <h1>Create Account</h1>
+          <p>填写以下信息注册新账户</p>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="name" className="sr-only">
-                姓名
-              </label>
+        
+        <form className="register-form" onSubmit={handleSubmit}>
+          <div className="input-group">
+            <label htmlFor="name">姓名</label>
               <input
                 id="name"
                 name="name"
                 type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="姓名"
+              className="input-field"
+                placeholder="请输入姓名"
               />
-            </div>
-            <div>
-              <label htmlFor="email" className="sr-only">
-                邮箱地址
-              </label>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="email">邮箱地址</label>
               <input
                 id="email"
                 name="email"
                 type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="邮箱地址"
+              className="input-field"
+              placeholder="your@email.com"
               />
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                密码
-              </label>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="password">密码</label>
+            <div className="password-field">
               <input
                 id="password"
                 name="password"
-                type="password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="密码"
+                className="input-field"
+                placeholder="至少8个字符"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="password-toggle"
+              >
+                {showPassword ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
+              </button>
             </div>
+            <p className="password-hint">密码必须至少8个字符</p>
           </div>
 
-          {error && (
-            <div className="text-red-500 text-sm text-center">{error}</div>
-          )}
+          {error && <div className="error-message">{error}</div>}
 
-          <div>
             <button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            className="register-button"
             >
-              {loading ? '注册中...' : '注册'}
+            {loading ? '注册中...' : '创建账户'}
             </button>
-          </div>
-
-          <div className="text-sm text-center">
-            <Link
-              href="/login"
-              className="font-medium text-indigo-600 hover:text-indigo-500"
-            >
-              已有账户？立即登录
-            </Link>
+          
+          <div className="login-prompt">
+            已有账户? <Link href="/login" className="login-link">立即登录</Link>
           </div>
         </form>
       </div>
+      
+      <style jsx global>{`
+        body {
+          margin: 0;
+          padding: 0;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .register-page {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background-color: #121212;
+          padding: 20px;
+        }
+        
+        .register-container {
+          width: 100%;
+          max-width: 420px;
+          background-color: #1e1e1e;
+          border-radius: 16px;
+          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+          padding: 40px 30px;
+        }
+        
+        .register-header {
+          text-align: center;
+          margin-bottom: 32px;
+        }
+        
+        .register-header h1 {
+          font-size: 32px;
+          font-weight: 700;
+          margin: 0 0 8px;
+          color: #ffffff;
+          letter-spacing: -0.5px;
+        }
+        
+        .register-header p {
+          font-size: 16px;
+          color: #9ca3af;
+          margin: 0;
+        }
+        
+        .register-form {
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+        }
+        
+        .input-group {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        
+        .input-group label {
+          font-size: 14px;
+          font-weight: 500;
+          color: #e0e0e0;
+        }
+        
+        .input-field {
+          padding: 12px 16px;
+          border-radius: 8px;
+          border: 1px solid #3f3f46;
+          background-color: #27272a;
+          color: #ffffff;
+          font-size: 16px;
+          transition: all 0.2s;
+        }
+        
+        .input-field::placeholder {
+          color: #71717a;
+        }
+        
+        .input-field:focus {
+          outline: none;
+          border-color: #FF9A3C;
+          box-shadow: 0 0 0 2px rgba(255, 154, 60, 0.2);
+        }
+        
+        .password-field {
+          position: relative;
+        }
+        
+        .password-toggle {
+          position: absolute;
+          top: 50%;
+          right: 12px;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          color: #9ca3af;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+        }
+        
+        .password-toggle:hover {
+          color: #e0e0e0;
+        }
+        
+        .password-hint {
+          font-size: 12px;
+          color: #9ca3af;
+          margin: 4px 0 0;
+        }
+        
+        .error-message {
+          color: #ef4444;
+          font-size: 14px;
+          padding: 8px 12px;
+          background-color: rgba(239, 68, 68, 0.1);
+          border-radius: 6px;
+          text-align: center;
+        }
+        
+        .register-button {
+          padding: 12px;
+          border: none;
+          border-radius: 8px;
+          background: linear-gradient(135deg, #FF6B00 0%, #FF9A3C 100%);
+          color: white;
+          font-weight: 600;
+          font-size: 16px;
+          cursor: pointer;
+          transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .register-button:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(255, 107, 0, 0.4);
+        }
+        
+        .register-button:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+        }
+        
+        .login-prompt {
+          text-align: center;
+          font-size: 14px;
+          color: #9ca3af;
+        }
+        
+        .login-link {
+          color: #FF9A3C;
+          font-weight: 500;
+          text-decoration: none;
+          transition: color 0.2s;
+        }
+        
+        .login-link:hover {
+          color: #FFB673;
+          text-decoration: underline;
+        }
+        
+        @media (max-width: 480px) {
+          .register-container {
+            padding: 30px 20px;
+          }
+          
+          .register-header h1 {
+            font-size: 28px;
+          }
+        }
+      `}</style>
     </div>
   );
 } 
