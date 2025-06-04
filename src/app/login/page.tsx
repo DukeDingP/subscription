@@ -81,6 +81,12 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
+      <div className="back-to-home">
+        <Link href="/">
+          <i className="fas fa-arrow-left"></i>
+          <span>返回主页</span>
+        </Link>
+      </div>
       <div className="login-container">
         <div className="login-header">
           <h1>欢迎回来</h1>
@@ -105,7 +111,7 @@ export default function LoginPage() {
           <div className="input-group">
             <div className="password-header">
               <label htmlFor="password">密码</label>
-              <Link href="/forgot-password" className="forgot-link">
+              <Link href="/forgot-password" className="forgot-link" style={{ color: '#FF9A3C' }}>
                 忘记密码?
               </Link>
             </div>
@@ -263,14 +269,18 @@ export default function LoginPage() {
         
         .forgot-link {
           font-size: 14px;
-          color: #FF9A3C;
+          color: #FF9A3C !important;
           text-decoration: none;
           transition: color 0.2s;
+          font-weight: 600;
+          padding: 2px 4px;
+          border-radius: 4px;
         }
         
         .forgot-link:hover {
-          color: #FFB673;
+          color: #FFB673 !important;
           text-decoration: underline;
+          background-color: rgba(255, 154, 60, 0.1);
         }
         
         .input-field {
@@ -418,6 +428,36 @@ export default function LoginPage() {
           .login-header h1 {
             font-size: 28px;
           }
+        }
+        
+        .back-to-home {
+          position: absolute;
+          top: 20px;
+          left: 20px;
+          z-index: 10;
+        }
+        
+        .back-to-home a {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: #fff;
+          text-decoration: none;
+          font-size: 14px;
+          font-weight: 500;
+          background-color: rgba(30, 30, 30, 0.8);
+          padding: 8px 16px;
+          border-radius: 20px;
+          transition: all 0.2s ease;
+        }
+        
+        .back-to-home a:hover {
+          background-color: rgba(50, 50, 50, 0.9);
+          transform: translateY(-2px);
+        }
+        
+        .back-to-home i {
+          font-size: 12px;
         }
       `}</style>
     </div>

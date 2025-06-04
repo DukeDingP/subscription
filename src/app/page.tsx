@@ -4,9 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { getBrowserLanguage } from '@/messages';
+import { createI18n, I18nContext } from '@/lib/i18n';
 
 export default function Home() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [prompt, setPrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('');
   const [showNegativePrompt, setShowNegativePrompt] = useState(false);
@@ -17,6 +19,43 @@ export default function Home() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasSubscription, setHasSubscription] = useState(false);
+  const [highQuality, setHighQuality] = useState(false);
+  const [expiryTime, setExpiryTime] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+  const [showTermsOfService, setShowTermsOfService] = useState(false);
+  const [showLanguageMenu, setShowLanguageMenu] = useState(false);
+  const [currentLanguage, setCurrentLanguage] = useState('en');
+  const [i18n, setI18n] = useState<I18nContext | null>(null);
+
+  // 初始化i18n
+  useEffect(() => {
+    // 从localStorage获取保存的语言设置，如果没有则使用浏览器默认语言
+    const savedLanguage = localStorage.getItem('preferred-language') || getBrowserLanguage();
+    setCurrentLanguage(savedLanguage);
+    setI18n(createI18n(savedLanguage));
+  }, []);
+
+  // 语言变化时更新i18n实例
+  useEffect(() => {
+    if (currentLanguage) {
+      const newI18n = createI18n(currentLanguage);
+      setI18n(newI18n);
+      // 保存语言偏好到localStorage
+      localStorage.setItem('preferred-language', currentLanguage);
+    }
+  }, [currentLanguage]);
+
+  // 在组件挂载后设置加载状态为false
+  useEffect(() => {
+    // 延迟一点时间再设置加载状态为false，确保会话信息已加载
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 300);
+    
+    return () => clearTimeout(timer);
+  }, []);
 
   // 加载public/images目录下的所有图片
   useEffect(() => {
@@ -32,6 +71,44 @@ export default function Home() {
     loadPublicImages();
   }, []);
 
+  // 检查用户订阅状态
+  useEffect(() => {
+    if (session?.user?.email) {
+      checkSubscription();
+    }
+  }, [session]);
+
+  // 检查用户是否已订阅
+  const checkSubscription = async () => {
+    try {
+      const response = await fetch('/api/subscription');
+      if (response.ok) {
+        const data = await response.json();
+        setHasSubscription(!!data);
+      }
+    } catch (error) {
+      console.error('检查订阅状态失败:', error);
+    }
+  };
+
+  // 处理高质量切换
+  const handleHighQualityToggle = () => {
+    if (!session) {
+      // 如果用户未登录，提示登录
+      signIn();
+      return;
+    }
+    
+    if (!hasSubscription) {
+      // 如果用户未订阅，显示订阅模态框
+      setShowProModal(true);
+      return;
+    }
+    
+    // 用户已订阅，可以切换高质量选项
+    setHighQuality(!highQuality);
+  };
+
   const handleGenerate = async () => {
     if (!session) {
       // 如果用户未登录，提示登录
@@ -41,15 +118,26 @@ export default function Home() {
     
     if (!prompt.trim()) return;
     
+    // 检查高质量选项是否需要订阅
+    if (highQuality && !hasSubscription) {
+      setShowProModal(true);
+      return;
+    }
+    
     // 开始生成图像
     try {
       setIsGenerating(true);
       setError(null);
       
-      // 调用后端API生成图像
-
-       // 调用Next.js API代理路由
-      const response = await fetch(`/api/generate?prompt=${encodeURIComponent(prompt)}`);
+      // 非会员生成图像时增加一些延迟，模拟更慢的生成速度
+      if (!hasSubscription) {
+        // 在API调用前增加2-4秒的延迟
+        await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 2000));
+      }
+      
+      // 调用Next.js API代理路由
+      const response = await fetch(`/api/generate?prompt=${encodeURIComponent(prompt)}${highQuality ? '&highQuality=true' : ''}`);
+      
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.detail || '生成图像失败');
@@ -102,34 +190,183 @@ export default function Home() {
     setShowUserMenu(!showUserMenu);
   };
 
+  // 添加点击外部关闭用户菜单的功能
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showUserMenu && !target.closest('.user-profile')) {
+        setShowUserMenu(false);
+      }
+      if (showLanguageMenu && !target.closest('.language-selector')) {
+        setShowLanguageMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUserMenu, showLanguageMenu]);
+
+  // 从localStorage加载图片
+  useEffect(() => {
+    try {
+      const storedData = localStorage.getItem('generatedImages');
+      if (storedData) {
+        const { images: storedImages, timestamp } = JSON.parse(storedData);
+        const now = new Date().getTime();
+        // 检查是否超过10分钟 (600000毫秒)
+        if (now - timestamp < 600000) {
+          setImages(storedImages);
+          // 计算过期时间并设置
+          setExpiryTime(timestamp + 600000);
+          
+          // 设置定时器，到期时清除图片
+          const timeLeft = 600000 - (now - timestamp);
+          const timerId = setTimeout(() => {
+            setImages([]);
+            setExpiryTime(null);
+            localStorage.removeItem('generatedImages');
+          }, timeLeft);
+          
+          return () => clearTimeout(timerId);
+        } else {
+          // 已超过10分钟，清除存储
+          localStorage.removeItem('generatedImages');
+        }
+      }
+    } catch (error) {
+      console.error('加载存储的图片时出错:', error);
+    }
+  }, []);
+
+  // 当图片更新时，保存到localStorage
+  useEffect(() => {
+    if (images.length > 0) {
+      try {
+        const timestamp = new Date().getTime();
+        const dataToStore = {
+          images,
+          timestamp
+        };
+        localStorage.setItem('generatedImages', JSON.stringify(dataToStore));
+        setExpiryTime(timestamp + 600000);
+      } catch (error) {
+        console.error('保存图片到localStorage时出错:', error);
+      }
+    }
+  }, [images]);
+  
+  // 倒计时功能
+  const [timeLeft, setTimeLeft] = useState<string>('');
+  
+  useEffect(() => {
+    if (!expiryTime) return;
+    
+    const updateTimeLeft = () => {
+      const now = new Date().getTime();
+      const remaining = expiryTime - now;
+      
+      if (remaining <= 0) {
+        setTimeLeft('已过期');
+        return;
+      }
+      
+      // 计算分钟和秒数
+      const minutes = Math.floor(remaining / 60000);
+      const seconds = Math.floor((remaining % 60000) / 1000);
+      
+      setTimeLeft(`${minutes}:${seconds < 10 ? '0' : ''}${seconds}`);
+    };
+    
+    // 立即更新一次
+    updateTimeLeft();
+    
+    // 每秒更新一次
+    const intervalId = setInterval(updateTimeLeft, 1000);
+    
+    return () => clearInterval(intervalId);
+  }, [expiryTime]);
+
+  // 语言切换功能
+  const toggleLanguageMenu = () => {
+    setShowLanguageMenu(!showLanguageMenu);
+  };
+
+  const changeLanguage = (langCode: string) => {
+    setCurrentLanguage(langCode);
+    setShowLanguageMenu(false);
+  };
+
+  // 获取当前语言显示名称
+  const getLanguageDisplayName = (langCode: string) => {
+    const languages: {[key: string]: string} = {
+      'en': 'English',
+      'zh-CN': '简体中文',
+      'zh-TW': '繁體中文',
+      'es': 'Español',
+      'fr': 'Français',
+      'ar': 'العربية',
+      'de': 'Deutsch',
+      'it': 'Italiano',
+      'ru': 'Русский',
+      'pt': 'Português',
+      'nl': 'Nederlands',
+      'pl': 'Polski',
+      'ja': '日本語',
+      'ko': '한국어',
+      'hi': 'हिन्दी',
+      'th': 'ไทย',
+      'vi': 'Tiếng Việt',
+      'id': 'Bahasa Indonesia',
+      'tr': 'Türkçe',
+      'he': 'עברית',
+      'sv': 'Svenska',
+      'fi': 'Suomi',
+      'da': 'Dansk'
+    };
+    return languages[langCode] || 'English';
+  };
+
+  // 如果正在加载会话信息，显示加载状态
+  if (status === "loading" || isLoading || !i18n) {
+    return (
+      <div className="loading-page">
+        <div className="loading-spinner"></div>
+      </div>
+    );
+  }
+
+  // 翻译辅助函数
+  const t = (key: string, params?: Record<string, string>) => {
+    return i18n ? i18n.t(key, params) : key;
+  };
+
   return (
     <>
       <div className="container">
         <div className="sidebar">
-          <div className="nav-icons">
-            <div className="logo">
-              <svg viewBox="0 0 24 24" fill="#fff">
-                <path d="M12 2c-5.52 0-10 4.48-10 10s4.48 10 10 10 10-4.48 10-10-4.48-10-10-10zm-1 14.5v-9l7 4.5-7 4.5z"/>
-              </svg>
-            </div>
-            <div className="nav-icon home-icon">
-              <i className="fas fa-home"></i>
-            </div>
-            <div className="nav-icon">
-              <i className="fas fa-search"></i>
-            </div>
+          <div className="logo-container">
+            <Link href="/" className="logo-link">
+              <div className="logo">
+                <svg viewBox="0 0 24 24" fill="#fff">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="#E65900" />
+                </svg>
+              </div>
+              <div className="logo-text">Lalaland</div>
+            </Link>
           </div>
 
           <div className="input-section">
             <div className="input-header">
-              <h3 className="input-title">描述提示词</h3>
-              <p className="input-subtitle">请用英文输入提示词以获得最佳效果</p>
+              <h3 className="input-title">{t('prompt_title')}</h3>
+              <p className="input-subtitle">{t('prompt_subtitle')}</p>
             </div>
             
             <div className="textarea-container">
           <textarea 
             className="image-input" 
-                placeholder="您想看到什么？" 
+                placeholder={t('prompt_placeholder')} 
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
           ></textarea>
@@ -143,15 +380,16 @@ export default function Home() {
                       checked={showNegativePrompt}
                       onChange={() => setShowNegativePrompt(!showNegativePrompt)}
                     />
-                    <label htmlFor="negativePromptToggle">负面提示词</label>
+                    <label htmlFor="negativePromptToggle">{t('negative_prompt')}</label>
                   </div>
                   <div className="toggle-option">
                     <input
                       type="checkbox"
                       id="highQualityToggle"
-                      
+                      checked={highQuality}
+                      onChange={handleHighQualityToggle}
                     />
-                    <label htmlFor="highQualityToggle">高质量</label>
+                    <label htmlFor="highQualityToggle">{t('high_quality')}</label>
                   </div>
                 </div>
               </div>
@@ -161,7 +399,7 @@ export default function Home() {
               <div className="negative-prompt-container">
                 <textarea 
                   className="negative-input" 
-                  placeholder="输入负面提示词（不希望出现在图像中的内容）" 
+                  placeholder={t('negative_prompt_placeholder')} 
                   value={negativePrompt}
                   onChange={(e) => setNegativePrompt(e.target.value)}
                 ></textarea>
@@ -184,7 +422,7 @@ export default function Home() {
                 onClick={() => handleGenerate()}
                 disabled={!prompt.trim() || isGenerating}
           >
-                {isGenerating ? '生成中...' : '生成'}
+                {isGenerating ? t('generating') : t('generate')}
           </button>
             </div>
             
@@ -195,55 +433,112 @@ export default function Home() {
             )}
           </div>
           
-          <div className="generated-images">
+          <div 
+            className={`generated-images ${(images.length > 0 || isGenerating) ? 'visible' : ''}`}
+          >
             {isGenerating ? (
               <div className="loading-container">
                 <div className="loading-spinner"></div>
-                <p>AI正在创作中...</p>
+                {hasSubscription ? (
+                  <p>{t('ai_creating')}</p>
+                ) : (
+                  <div className="non-member-loading">
+                    <p>{t('ai_creating')}</p>
+                    <Link href="/subscribe" className="pro-speed-tip">
+                      <i className="fas fa-bolt"></i>
+                      <span>{t('pro_speed_tip')}</span>
+                    </Link>
+                  </div>
+                )}
               </div>
             ) : (
-              images.map((src, index) => (
-                <Image 
-                  key={index} 
-                  src={src} 
-                  alt={`生成的图像 ${index + 1}`} 
-                  className="generated-image" 
-                  onClick={() => handleImageClick(src)}
-                  width={400}
-                  height={400}
-                />
-              ))
+              <>
+                {timeLeft && images.length > 0 && (
+                  <div className="expiry-timer">
+                    <i className="fas fa-clock"></i>
+                    <span>{t('image_expiry')} {timeLeft} </span>
+                  </div>
+                )}
+                {images.map((src, index) => (
+                  <Image 
+                    key={index} 
+                    src={src} 
+                    alt={`${t('generated_image')} ${index + 1}`} 
+                    className="generated-image" 
+                    onClick={() => handleImageClick(src)}
+                    width={400}
+                    height={400}
+                  />
+                ))}
+              </>
             )}
           </div>
 
           <div className="footer">
             <div className="footer-links">
-              <a href="#" className="footer-link">法律条款</a>
-              <a href="#" className="footer-link">安全与隐私中心</a>
-              <a href="#" className="footer-link">隐私政策</a>
-              <a href="#" className="footer-link">Cookie</a>
-              <a href="#" className="footer-link">关于广告</a>
-              <a href="#" className="footer-link">无障碍</a>
-              <a href="#" className="footer-link">收集通知</a>
+              <a href="#" className="footer-link" onClick={(e) => {
+                e.preventDefault();
+                setShowPrivacyPolicy(true);
+              }}>Privacy Policy</a>
+              <a href="#" className="footer-link" onClick={(e) => {
+                e.preventDefault();
+                setShowTermsOfService(true);
+              }}>Terms of Service</a>
             </div>
-            <button className="language-btn">
-              <i className="fas fa-globe"></i>
-              简体中文
-            </button>
+            <div className="language-selector">
+              <button className="language-btn" onClick={toggleLanguageMenu}>
+                <i className="fas fa-globe"></i>
+                {getLanguageDisplayName(currentLanguage)}
+              </button>
+              {showLanguageMenu && (
+                <div className="language-dropdown">
+                  <div className="language-group">
+                    <h4>Global Languages</h4>
+                    <button onClick={() => changeLanguage('en')} className={currentLanguage === 'en' ? 'active' : ''}>English</button>
+                    <button onClick={() => changeLanguage('zh-CN')} className={currentLanguage === 'zh-CN' ? 'active' : ''}>简体中文</button>
+                    <button onClick={() => changeLanguage('zh-TW')} className={currentLanguage === 'zh-TW' ? 'active' : ''}>繁體中文</button>
+                    <button onClick={() => changeLanguage('es')} className={currentLanguage === 'es' ? 'active' : ''}>Español</button>
+                    <button onClick={() => changeLanguage('fr')} className={currentLanguage === 'fr' ? 'active' : ''}>Français</button>
+                    <button onClick={() => changeLanguage('ar')} className={currentLanguage === 'ar' ? 'active' : ''}>العربية</button>
+                  </div>
+                  <div className="language-group">
+                    <h4>European Languages</h4>
+                    <button onClick={() => changeLanguage('de')} className={currentLanguage === 'de' ? 'active' : ''}>Deutsch</button>
+                    <button onClick={() => changeLanguage('it')} className={currentLanguage === 'it' ? 'active' : ''}>Italiano</button>
+                    <button onClick={() => changeLanguage('ru')} className={currentLanguage === 'ru' ? 'active' : ''}>Русский</button>
+                    <button onClick={() => changeLanguage('pt')} className={currentLanguage === 'pt' ? 'active' : ''}>Português</button>
+                    <button onClick={() => changeLanguage('nl')} className={currentLanguage === 'nl' ? 'active' : ''}>Nederlands</button>
+                    <button onClick={() => changeLanguage('pl')} className={currentLanguage === 'pl' ? 'active' : ''}>Polski</button>
+                  </div>
+                  <div className="language-group">
+                    <h4>Asian Languages</h4>
+                    <button onClick={() => changeLanguage('ja')} className={currentLanguage === 'ja' ? 'active' : ''}>日本語</button>
+                    <button onClick={() => changeLanguage('ko')} className={currentLanguage === 'ko' ? 'active' : ''}>한국어</button>
+                    <button onClick={() => changeLanguage('hi')} className={currentLanguage === 'hi' ? 'active' : ''}>हिन्दी</button>
+                    <button onClick={() => changeLanguage('th')} className={currentLanguage === 'th' ? 'active' : ''}>ไทย</button>
+                    <button onClick={() => changeLanguage('vi')} className={currentLanguage === 'vi' ? 'active' : ''}>Tiếng Việt</button>
+                    <button onClick={() => changeLanguage('id')} className={currentLanguage === 'id' ? 'active' : ''}>Bahasa Indonesia</button>
+                  </div>
+                  <div className="language-group">
+                    <h4>Other Languages</h4>
+                    <button onClick={() => changeLanguage('tr')} className={currentLanguage === 'tr' ? 'active' : ''}>Türkçe</button>
+                    <button onClick={() => changeLanguage('he')} className={currentLanguage === 'he' ? 'active' : ''}>עברית</button>
+                    <button onClick={() => changeLanguage('sv')} className={currentLanguage === 'sv' ? 'active' : ''}>Svenska</button>
+                    <button onClick={() => changeLanguage('fi')} className={currentLanguage === 'fi' ? 'active' : ''}>Suomi</button>
+                    <button onClick={() => changeLanguage('da')} className={currentLanguage === 'da' ? 'active' : ''}>Dansk</button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         <div className="main-content">
           <div className="header">
-            <div className="search-bar">
-              <i className="fas fa-search" style={{ color: "#b3b3b3" }}></i>
-              <input type="text" placeholder="搜索图像或创意" />
+            <div className="header-title">
+              <h1>{t('explore_ai_world')}</h1>
             </div>
-            <div className="nav-buttons">
-              <a href="#" className="nav-link">高级会员</a>
-              <a href="#" className="nav-link">支持</a>
-              <a href="#" className="nav-link">下载</a>
-            </div>
+
             <div className="auth-buttons">
               {session ? (
                 <div className="user-profile">
@@ -255,31 +550,31 @@ export default function Home() {
                   {showUserMenu && (
                     <div className="user-dropdown">
                       <div className="user-info">
-                        <span className="user-name">{session.user?.name || '用户'}</span>
+                        <span className="user-name">{session.user?.name || t('user')}</span>
                         <span className="user-email">{session.user?.email || ''}</span>
                       </div>
                       <div className="dropdown-divider"></div>
                       <Link href="/account" className="dropdown-item">
                         <i className="fas fa-id-card"></i>
-                        账户信息
+                        {t('account_info')}
                       </Link>
-                  <button 
+                      <button 
                         className="dropdown-item"
-                    onClick={() => signOut()}
-                  >
+                        onClick={() => signOut()}
+                      >
                         <i className="fas fa-sign-out-alt"></i>
-                    退出登录
-                  </button>
+                        {t('logout')}
+                      </button>
                     </div>
                   )}
                 </div>
               ) : (
                 <>
                   <Link href="/register" className="btn btn-outline">
-                    注册
+                    {t('register')}
                   </Link>
                   <Link href="/login" className="btn btn-primary">
-                    登录
+                    {t('login')}
                   </Link>
                 </>
               )}
@@ -288,24 +583,21 @@ export default function Home() {
 
           <div className="scrollable-content">
             <div className="section">
-              <div className="section-header">
-                <h2 className="section-title">热门创意</h2>
-                <a href="#" className="show-all">查看全部</a>
-              </div>
+
               <div className="image-gallery">
                 {publicImages.map((src, index) => (
                   <div key={index} className="gallery-item">
                     <Image 
                       src={src} 
-                      alt={`创意图像 ${index + 1}`} 
+                      alt={`${t('creative_image')} ${index + 1}`} 
                       className="gallery-img" 
                       onClick={() => handleImageClick(src)} 
                       width={400}
                       height={400}
                     />
                   <div className="gallery-info">
-                      <h3 className="gallery-title">创意图像 {index + 1}</h3>
-                      <p className="gallery-author">来自: 图片库</p>
+                      <h3 className="gallery-title">{t('creative_image')} {index + 1}</h3>
+                      <p className="gallery-author">{t('from_gallery')}</p>
                   </div>
                 </div>
                 ))}
@@ -314,21 +606,21 @@ export default function Home() {
 
             <div className="section">
               <div className="section-header">
-                <h2 className="section-title">热门创作者</h2>
-                <a href="#" className="show-all">查看全部</a>
+                <h2 className="section-title">{t('popular_creators')}</h2>
+
               </div>
               <div className="creators-grid">
                 {[1, 5, 9, 13].map((imageIndex, index) => (
                   <div key={index} className="creator-card">
                     <Image 
                       src={`/images/${imageIndex}.webp`} 
-                      alt={`创作者 ${index + 1}`} 
+                      alt={`${t(`creators.${index}.name`)} - ${t(`creators.${index}.title`)}`} 
                       className="creator-img" 
                       width={180}
                       height={180}
                     />
-                    <h3 className="creator-title">{['张艺谋', '刘慈欣', '王家卫', '陈凯歌'][index]}</h3>
-                    <p className="creator-subtitle">{['视觉艺术家', '科幻作家', '电影导演', '电影导演'][index]}</p>
+                    <h3 className="creator-title">{t(`creators.${index}.name`)}</h3>
+                    <p className="creator-subtitle">{t(`creators.${index}.title`)}</p>
                 </div>
                 ))}
                 </div>
@@ -352,13 +644,13 @@ export default function Home() {
             <Image src={selectedImage} alt="放大查看" className="modal-image" width={800} height={800} />
             <div className="modal-actions">
               <button className="modal-btn">
-                <i className="fas fa-heart"></i> 喜欢
+                <i className="fas fa-heart"></i> {t('like')}
               </button>
               <button className="modal-btn">
-                <i className="fas fa-download"></i> 下载
+                <i className="fas fa-download"></i> {t('download')}
               </button>
               <button className="modal-btn">
-                <i className="fas fa-share"></i> 分享
+                <i className="fas fa-share"></i> {t('share')}
               </button>
             </div>
           </div>
@@ -372,7 +664,7 @@ export default function Home() {
             <span className="close-modal" onClick={handleCloseProModal}>&times;</span>
             <div className="pro-modal-content">
               <h2>升级到Pro版本</h2>
-              <p>生成高质量图像需要升级到Pro版本</p>
+              <p>{highQuality ? '使用高质量图像生成功能' : '生成高质量图像'}需要升级到Pro版本</p>
               <div className="pro-features">
                 <div className="feature">
                   <i className="fas fa-check-circle"></i>
@@ -393,8 +685,134 @@ export default function Home() {
               </div>
               <div className="pro-actions">
                 <button className="cancel-btn" onClick={handleCloseProModal}>取消</button>
-                <Link href="/subscription" className="upgrade-btn">升级到Pro</Link>
+                <Link href="/subscribe" className="upgrade-btn">升级到Pro</Link>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 隐私政策模态框 */}
+      {showPrivacyPolicy && (
+        <div className="modal-overlay" onClick={() => setShowPrivacyPolicy(false)}>
+          <div className="privacy-modal" onClick={(e) => e.stopPropagation()}>
+            <span className="close-modal" onClick={() => setShowPrivacyPolicy(false)}>&times;</span>
+            <div className="privacy-modal-content">
+              <h2>Privacy Policy</h2>
+              <p className="privacy-date">Last updated: January 10, 2024</p>
+              
+              <h3>1. Introduction</h3>
+              <p>At Lalaland, we take your privacy seriously. This Privacy Policy explains how we collect, use, and protect your information when you use our AI image generation service at Lalaland.app ("the Service").</p>
+              
+              <h3>2. Information We Don't Collect</h3>
+              <p>We are committed to minimal data collection. We do not:</p>
+              <ul>
+                <li>Require user registration or accounts</li>
+                <li>Store your prompts or generated images</li>
+                <li>Collect personal information</li>
+                <li>Use cookies for tracking</li>
+                <li>Share any data with third parties</li>
+              </ul>
+              
+              <h3>3. Information We Process</h3>
+              <p>The only information we process includes:</p>
+              <ul>
+                <li>Temporary text prompts during image generation</li>
+                <li>Generated images during the creation process</li>
+                <li>Basic usage analytics (non-personally identifiable)</li>
+              </ul>
+              
+              <h3>4. How We Use Information</h3>
+              <p>Any information processed is used solely for:</p>
+              <ul>
+                <li>Generating images in response to your prompts</li>
+                <li>Improving the Service's performance and quality</li>
+                <li>Maintaining service security and preventing abuse</li>
+              </ul>
+              
+              <h3>5. Data Retention</h3>
+              <p>We follow a strict no-storage policy. All prompts and generated images are processed in real-time and deleted immediately after generation. We do not maintain any database of user content.</p>
+              
+              <h3>6. Security Measures</h3>
+              <p>We implement appropriate technical measures to protect against unauthorized access, alteration, or destruction of the limited data we process. Our service operates on secure, encrypted connections.</p>
+              
+              <h3>7. Children's Privacy</h3>
+              <p>Our Service is not intended for children under 13 years of age. We do not knowingly collect or process information from children under 13.</p>
+              
+              <h3>8. Changes to Privacy Policy</h3>
+              <p>We may update this Privacy Policy from time to time. We will notify users of any material changes by posting the new Privacy Policy on this page.</p>
+              
+              <h3>9. Your Rights</h3>
+              <p>Since we don't collect personal data, there is typically no user data to:</p>
+              <ul>
+                <li>Access</li>
+                <li>Correct</li>
+                <li>Delete</li>
+                <li>Export</li>
+              </ul>
+              
+              <h3>10. Contact Information</h3>
+              <p>If you have any questions about this Privacy Policy, please contact us at support@lalaland.land.</p>
+              
+              <h3>11. Legal Basis</h3>
+              <p>We process the minimal required information based on legitimate interests in providing and improving the Service while maintaining user privacy and security.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 服务条款模态框 */}
+      {showTermsOfService && (
+        <div className="modal-overlay" onClick={() => setShowTermsOfService(false)}>
+          <div className="privacy-modal terms-modal" onClick={(e) => e.stopPropagation()}>
+            <span className="close-modal" onClick={() => setShowTermsOfService(false)}>&times;</span>
+            <div className="privacy-modal-content">
+              <h2>Terms of Service</h2>
+              <p className="privacy-date">Last updated: January 10, 2024</p>
+              
+              <h3>1. Introduction</h3>
+              <p>Welcome to Lalaland. By accessing or using our AI image generation service at Lalaland.app ("the Service"), you agree to be bound by these Terms of Service ("Terms"). Please read these Terms carefully before using the Service.</p>
+              
+              <h3>2. Service Description</h3>
+              <p>Lalaland is a free AI image generation service powered by the FLUX.1-Dev model. We provide users with the ability to generate images from text descriptions without requiring registration or payment.</p>
+              
+              <h3>3. User Obligations</h3>
+              <p>By using our Service, you agree to:</p>
+              <ul>
+                <li>Use the Service in compliance with all applicable laws and regulations</li>
+                <li>Not attempt to circumvent any limitations or security measures</li>
+                <li>Not use the Service for any illegal or unauthorized purposes</li>
+                <li>Not interfere with or disrupt the Service or servers</li>
+                <li>Not generate content that violates intellectual property rights or contains harmful material</li>
+              </ul>
+              
+              <h3>4. Intellectual Property Rights</h3>
+              <p>Images generated through our Service are provided under the Creative Commons Zero (CC0) license. You may use the generated images for any purpose, including commercial use, without attribution requirements. However, you acknowledge that certain prompts or outputs may be subject to third-party rights.</p>
+              
+              <h3>5. Privacy and Data Protection</h3>
+              <p>Our privacy practices are outlined in our Privacy Policy. We do not store user prompts or generated images, and we do not require user registration or collect personal information.</p>
+              
+              <h3>6. Service Availability</h3>
+              <p>While we strive to maintain continuous service availability, we do not guarantee uninterrupted access to the Service. We reserve the right to modify, suspend, or discontinue any aspect of the Service at any time without notice.</p>
+              
+              <h3>7. Content Guidelines</h3>
+              <p>You agree not to generate:</p>
+              <ul>
+                <li>Content that violates any applicable laws or regulations</li>
+                <li>Hateful, discriminatory, or offensive content</li>
+                <li>Content that infringes on intellectual property rights</li>
+                <li>Sexually explicit or pornographic content</li>
+                <li>Content intended to harass, abuse, or harm others</li>
+              </ul>
+              
+              <h3>8. Limitation of Liability</h3>
+              <p>The Service is provided "as is" without any warranties. We shall not be liable for any damages arising from the use of the Service, including but not limited to direct, indirect, incidental, punitive, and consequential damages.</p>
+              
+              <h3>9. Changes to Terms</h3>
+              <p>We reserve the right to modify these Terms at any time. Continued use of the Service after any changes constitutes acceptance of the new Terms. We will notify users of material changes by posting the updated Terms on this page.</p>
+              
+              <h3>10. Contact Information</h3>
+              <p>If you have any questions about these Terms, please contact us at support@lalaland.land.</p>
             </div>
           </div>
         </div>
@@ -592,8 +1010,148 @@ export default function Home() {
         }
 
         @media (max-width: 768px) {
-          .image-gallery {
-            column-count: 2;
+          .container {
+            flex-direction: column;
+          }
+          
+          .sidebar {
+            width: 100%;
+            max-height: none;
+            padding: 12px 10px;
+          }
+          
+          .main-content {
+            display: none;
+          }
+          
+          .input-section {
+            margin-bottom: 12px;
+          }
+          
+          .input-title {
+            font-size: 18px;
+          }
+          
+          .image-input {
+            min-height: 60px;
+          }
+          
+          .button-group {
+            margin-top: 8px;
+          }
+          
+          .generated-images {
+            max-height: 50vh;
+          }
+          
+          .generated-image {
+            max-height: 250px;
+          }
+          
+          .footer {
+            position: static;
+            margin-top: 16px;
+            max-width: 100%;
+            transform: none;
+            background-color: transparent;
+            box-shadow: none;
+            padding: 0;
+          }
+          
+          .footer::before {
+            display: none;
+          }
+          
+          .footer-links {
+            justify-content: center;
+          }
+          
+          .language-btn {
+            width: auto;
+            margin: 0 auto;
+          }
+          
+          .modal-content {
+            max-width: 95%;
+          }
+          
+          .pro-modal {
+            width: 95%;
+            padding: 16px;
+          }
+          
+          .back-to-home {
+            top: 10px;
+            left: 10px;
+          }
+          
+          .back-to-home a {
+            padding: 6px 12px;
+            font-size: 12px;
+          }
+          
+          .nav-icons {
+            justify-content: space-between;
+            margin-bottom: 12px;
+          }
+          
+          .logo-container {
+            margin-bottom: 15px;
+            padding: 3px 0;
+          }
+          
+          .logo {
+            width: 28px;
+            height: 28px;
+          }
+          
+          .logo-text {
+            font-size: 18px;
+          }
+        }
+        
+        /* 小屏幕手机优化 */
+        @media (max-width: 480px) {
+          .sidebar {
+            padding: 10px 8px;
+          }
+          
+          .input-title {
+            font-size: 16px;
+          }
+          
+          .input-subtitle {
+            font-size: 10px;
+          }
+          
+          .footer-links {
+            gap: 6px;
+          }
+          
+          .footer-link {
+            font-size: 10px;
+          }
+          
+          .generated-images {
+            padding: 6px;
+          }
+          
+          .expiry-timer {
+            font-size: 12px;
+            padding: 6px 10px;
+          }
+          
+          .pro-speed-tip {
+            padding: 6px 12px;
+            font-size: 11px;
+          }
+        }
+        
+        /* 确保页面在移动设备上正确缩放 */
+        @media screen and (max-width: 768px) {
+          html, body {
+            overflow-x: hidden;
+            width: 100%;
           }
         }
 
@@ -717,71 +1275,220 @@ export default function Home() {
         }
 
         .footer {
-          padding: 16px 0;
-          border-top: 1px solid #282828;
-          margin-top: 10px;
+          position: fixed;
+          bottom: 20px;
+          left: 20px;
+          background-color: rgba(18, 18, 18, 0.8);
+          padding: 10px;
+          border-radius: 8px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+          z-index: 10;
+          max-width: 240px;
+          transform: translateY(calc(100% - 40px));
+          transition: transform 0.3s ease;
         }
-
+        
+        .footer:hover {
+          transform: translateY(0);
+        }
+        
+        .footer::before {
+          content: "法律与隐私";
+          display: block;
+          color: #b3b3b3;
+          font-size: 12px;
+          font-weight: 600;
+          margin-bottom: 10px;
+          text-align: center;
+        }
+        
         .footer-links {
           display: flex;
           flex-wrap: wrap;
-          gap: 12px;
-          margin-bottom: 16px;
+          gap: 8px;
+          margin-bottom: 12px;
         }
 
         .footer-link {
           color: #b3b3b3;
           text-decoration: none;
-          font-size: 12px;
+          font-size: 11px;
+          transition: color 0.2s ease;
         }
-
+        
+        .footer-link:hover {
+          color: #ffffff;
+          text-decoration: underline;
+        }
+        
+        .language-selector {
+          position: relative;
+          display: inline-block;
+        }
+        
         .language-btn {
           display: flex;
           align-items: center;
-          gap: 8px;
+          justify-content: center;
+          gap: 6px;
           background-color: transparent;
           color: #fff;
           border: 1px solid #727272;
-          border-radius: 20px;
-          padding: 8px 16px;
-          font-size: 14px;
+          border-radius: 16px;
+          padding: 6px 12px;
+          font-size: 12px;
           cursor: pointer;
+          transition: background-color 0.2s ease;
+          width: 100%;
         }
-
-        .preview-banner {
-          background: linear-gradient(90deg, #00C9FF 0%, #92FE9D 100%);
-          padding: 12px 24px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
+        
+        .language-btn:hover {
+          background-color: rgba(255, 255, 255, 0.1);
         }
-
-        .preview-text {
-          color: #fff;
-          font-size: 14px;
+        
+        .language-dropdown {
+          position: fixed;
+          bottom: 60px;
+          left: 20px;
+          background-color: #1a1a1a;
+          border-radius: 8px;
+          box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+          border: 1px solid #333;
+          padding: 12px;
+          width: 300px;
+          max-height: 400px;
+          overflow-y: auto;
+          z-index: 1000;
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 10px;
+          animation: fadeIn 0.2s ease;
         }
-
-        .preview-title {
-          font-weight: 700;
-          margin-bottom: 4px;
+        
+        .language-group {
+          margin-bottom: 10px;
+          grid-column: span 2;
         }
-
-        .signup-free-btn {
-          background-color: #fff;
-          color: #000;
+        
+        .language-group h4 {
+          font-size: 12px;
+          color: #888;
+          margin-bottom: 8px;
+          padding-bottom: 4px;
+          border-bottom: 1px solid #333;
+        }
+        
+        .language-group button {
+          background: transparent;
           border: none;
-          border-radius: 20px;
-          padding: 12px 32px;
-          font-weight: 700;
-          font-size: 14px;
+          color: #e0e0e0;
+          padding: 6px 10px;
+          text-align: left;
+          font-size: 13px;
           cursor: pointer;
-          text-decoration: none;
+          width: 100%;
+          border-radius: 4px;
+          transition: all 0.2s ease;
+          display: inline-block;
+          width: calc(50% - 5px);
+          margin: 0 0 5px 0;
+        }
+        
+        .language-group button:hover {
+          background-color: #333;
+        }
+        
+        .language-group button.active {
+          background-color: rgba(251, 97, 7, 0.2);
+          color: #FB6107;
+        }
+        
+        @media (max-width: 768px) {
+          .language-dropdown {
+            width: 280px;
+            left: 10px;
+            bottom: 50px;
+            max-height: 300px;
+          }
+          
+          .language-group button {
+            width: 100%;
+          }
         }
 
+        .generated-images {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          margin-bottom: 16px;
+          width: 100%;
+          padding: 8px;
+          background: #1a1a1a;
+          border-radius: 8px;
+          border: 1px solid #333;
+          overflow-y: auto;
+          max-height: 60vh;
+          opacity: 0;
+          transform: translateY(20px);
+          transition: opacity 0.4s ease, transform 0.4s ease;
+          visibility: hidden;
+          height: 0;
+          margin: 0;
+          padding: 0;
+        }
+        
+        .generated-images.visible {
+          opacity: 1;
+          transform: translateY(0);
+          visibility: visible;
+          height: auto;
+          margin-bottom: 16px;
+          padding: 8px;
+        }
+
+        .logo-container {
+          display: flex;
+          align-items: center;
+          margin-bottom: 20px;
+          padding: 5px 0;
+        }
+        
+        .logo-link {
+          display: flex;
+          align-items: center;
+          text-decoration: none;
+          color: #fff;
+          transition: transform 0.2s ease;
+        }
+        
+        .logo-link:hover {
+          transform: scale(1.05);
+        }
+        
         .logo {
-          width: 28px;
-          height: 28px;
-          margin-right: 4px;
+          width: 32px;
+          height: 32px;
+          margin-right: 10px;
+        }
+        
+        .logo-text {
+          font-size: 20px;
+          font-weight: 700;
+          background: linear-gradient(90deg, #FB6107, #FF8134);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+        
+        .header-title {
+          font-size: 18px;
+          color: #fff;
+        }
+        
+        .header-title h1 {
+          font-size: 18px;
+          font-weight: 600;
+          margin: 0;
         }
 
         .nav-icons {
@@ -1005,20 +1712,6 @@ export default function Home() {
           color: rgba(255, 255, 255, 0.7);
           cursor: not-allowed;
           box-shadow: none;
-        }
-
-        .generated-images {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          margin-bottom: 16px;
-          width: 100%;
-          padding: 8px;
-          background: #1a1a1a;
-          border-radius: 8px;
-          border: 1px solid #333;
-          overflow-y: auto;
-          max-height: 60vh;
         }
 
         .generated-image {
@@ -1439,6 +2132,128 @@ export default function Home() {
           margin-top: 12px;
           font-size: 14px;
           text-align: center;
+        }
+
+        .expiry-timer {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          background-color: rgba(0, 0, 0, 0.6);
+          color: #fff;
+          padding: 8px 12px;
+          border-radius: 6px;
+          margin-bottom: 12px;
+          font-size: 14px;
+        }
+        
+        .expiry-timer i {
+          color: #FF9A3C;
+        }
+
+        .non-member-loading {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+        }
+        
+        .pro-speed-tip {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          background-color: rgba(251, 97, 7, 0.15);
+          color: #fff;
+          border: 1px solid rgba(251, 97, 7, 0.3);
+          border-radius: 20px;
+          padding: 8px 16px;
+          font-size: 13px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          margin-top: 4px;
+        }
+        
+        .pro-speed-tip:hover {
+          background-color: rgba(251, 97, 7, 0.25);
+          transform: translateY(-2px);
+        }
+        
+        .pro-speed-tip i {
+          color: #FB6107;
+          font-size: 14px;
+        }
+
+        .loading-page {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          height: 100vh;
+          width: 100vw;
+          background-color: #121212;
+        }
+        
+        .loading-page .loading-spinner {
+          width: 50px;
+          height: 50px;
+          border: 4px solid rgba(251, 97, 7, 0.2);
+          border-radius: 50%;
+          border-top: 4px solid #FB6107;
+          animation: spin 1s linear infinite;
+        }
+
+        .privacy-modal {
+          background-color: #1a1a1a;
+          border-radius: 12px;
+          width: 90%;
+          max-width: 800px;
+          max-height: 80vh;
+          position: relative;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+          border: 1px solid #333;
+          animation: scaleIn 0.3s ease;
+          overflow-y: auto;
+        }
+        
+        .privacy-modal-content {
+          padding: 24px;
+        }
+        
+        .privacy-modal h2 {
+          font-size: 24px;
+          margin-bottom: 8px;
+          color: #FB6107;
+        }
+        
+        .privacy-date {
+          color: #888;
+          font-size: 14px;
+          margin-bottom: 20px;
+        }
+        
+        .privacy-modal h3 {
+          font-size: 18px;
+          margin: 20px 0 10px;
+          color: #e0e0e0;
+        }
+        
+        .privacy-modal p {
+          margin-bottom: 15px;
+          color: #bbb;
+          font-size: 14px;
+          line-height: 1.6;
+        }
+        
+        .privacy-modal ul {
+          margin-bottom: 15px;
+          padding-left: 20px;
+        }
+        
+        .privacy-modal li {
+          color: #bbb;
+          font-size: 14px;
+          margin-bottom: 5px;
+          line-height: 1.5;
         }
       `}</style>
     </>

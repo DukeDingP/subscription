@@ -5,6 +5,7 @@ export async function GET(request: NextRequest) {
     // 获取查询参数
     const searchParams = request.nextUrl.searchParams;
     const prompt = searchParams.get('prompt');
+    const highQuality = searchParams.get('highQuality') === 'true';
     
     if (!prompt) {
       return NextResponse.json(
@@ -14,8 +15,8 @@ export async function GET(request: NextRequest) {
     }
     
     // 构建API URL
-    const apiUrl = process.env.API_SERVER_URL ;
-    const url = `${apiUrl}/generate?prompt=${encodeURIComponent(prompt)}`;
+    const apiUrl = process.env.API_SERVER_URL;
+    const url = `${apiUrl}/generate?prompt=${encodeURIComponent(prompt)}${highQuality ? '&highQuality=true' : ''}`;
     
     // 转发请求到Flask后端
     const response = await fetch(url, {

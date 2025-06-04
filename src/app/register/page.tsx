@@ -52,6 +52,12 @@ export default function RegisterPage() {
 
   return (
     <div className="register-page">
+      <div className="back-to-home">
+        <Link href="/">
+          <i className="fas fa-arrow-left"></i>
+          <span>返回主页</span>
+        </Link>
+      </div>
       <div className="register-container">
         <div className="register-header">
           <h1>Create Account</h1>
@@ -295,6 +301,36 @@ export default function RegisterPage() {
           .register-header h1 {
             font-size: 28px;
           }
+        }
+        
+        .back-to-home {
+          position: absolute;
+          top: 20px;
+          left: 20px;
+          z-index: 10;
+        }
+        
+        .back-to-home a {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: #fff;
+          text-decoration: none;
+          font-size: 14px;
+          font-weight: 500;
+          background-color: rgba(30, 30, 30, 0.8);
+          padding: 8px 16px;
+          border-radius: 20px;
+          transition: all 0.2s ease;
+        }
+        
+        .back-to-home a:hover {
+          background-color: rgba(50, 50, 50, 0.9);
+          transform: translateY(-2px);
+        }
+        
+        .back-to-home i {
+          font-size: 12px;
         }
       `}</style>
     </div>
