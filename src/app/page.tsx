@@ -11,14 +11,12 @@ export default function Home() {
   const [negativePrompt, setNegativePrompt] = useState('');
   const [showNegativePrompt, setShowNegativePrompt] = useState(false);
   const [showProModal, setShowProModal] = useState(false);
-  const [images, setImages] = useState([
-    'https://placehold.co/400x400/e8d9b5/333333?text=AI生成图像1',
-    'https://placehold.co/400x400/4a7c59/ffffff?text=AI生成图像2',
-    'https://placehold.co/400x400/e8f4f8/333333?text=AI生成图像3'
-  ]);
+  const [images, setImages] = useState<string[]>([]);
   const [publicImages, setPublicImages] = useState<string[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // 加载public/images目录下的所有图片
   useEffect(() => {
@@ -31,11 +29,10 @@ export default function Home() {
         console.error('加载图片时出错：', error);
       }
     };
-
     loadPublicImages();
   }, []);
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!session) {
       // 如果用户未登录，提示登录
       signIn();
@@ -44,8 +41,35 @@ export default function Home() {
     
     if (!prompt.trim()) return;
     
-    // 显示Pro订阅模态框
-    setShowProModal(true);
+    // 开始生成图像
+    try {
+      setIsGenerating(true);
+      setError(null);
+      
+      // 调用后端API生成图像
+
+       // 调用Next.js API代理路由
+      const response = await fetch(`/api/generate?prompt=${encodeURIComponent(prompt)}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '生成图像失败');
+      }
+      
+      const data = await response.json();
+      
+      if (data.status === 'success') {
+        // 将Base64编码的图像转换为可显示的URL
+        const imageUrls = data.images.map((base64: string) => `data:image/webp;base64,${base64}`);
+        setImages(imageUrls);
+      } else {
+        throw new Error(data.detail || '生成图像失败');
+      }
+    } catch (error) {
+      console.error('生成图像时出错:', error);
+      setError(error instanceof Error ? error.message : '生成图像时发生错误');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,7 +149,7 @@ export default function Home() {
                     <input
                       type="checkbox"
                       id="highQualityToggle"
-                      onChange={() => handleGenerate()}
+                      
                     />
                     <label htmlFor="highQualityToggle">高质量</label>
                   </div>
@@ -158,25 +182,38 @@ export default function Home() {
           <button 
             className="generate-btn" 
                 onClick={() => handleGenerate()}
-                disabled={!prompt.trim()}
+                disabled={!prompt.trim() || isGenerating}
           >
-                {session ? '生成' : '登录'}
+                {isGenerating ? '生成中...' : '生成'}
           </button>
             </div>
+            
+            {error && (
+              <div className="error-message">
+                {error}
+              </div>
+            )}
           </div>
           
           <div className="generated-images">
-            {images.map((src, index) => (
-              <Image 
-                key={index} 
-                src={src} 
-                alt={`生成的图像 ${index + 1}`} 
-                className="generated-image" 
-                onClick={() => handleImageClick(src)}
-                width={400}
-                height={400}
-              />
-            ))}
+            {isGenerating ? (
+              <div className="loading-container">
+                <div className="loading-spinner"></div>
+                <p>AI正在创作中...</p>
+              </div>
+            ) : (
+              images.map((src, index) => (
+                <Image 
+                  key={index} 
+                  src={src} 
+                  alt={`生成的图像 ${index + 1}`} 
+                  className="generated-image" 
+                  onClick={() => handleImageClick(src)}
+                  width={400}
+                  height={400}
+                />
+              ))
+            )}
           </div>
 
           <div className="footer">
@@ -1362,6 +1399,46 @@ export default function Home() {
         .dropdown-item i {
           font-size: 14px;
           width: 16px;
+        }
+
+        .loading-container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 40px 0;
+          width: 100%;
+        }
+        
+        .loading-spinner {
+          width: 40px;
+          height: 40px;
+          border: 4px solid rgba(251, 97, 7, 0.1);
+          border-radius: 50%;
+          border-top: 4px solid #FB6107;
+          animation: spin 1s linear infinite;
+          margin-bottom: 16px;
+        }
+        
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        
+        .loading-container p {
+          color: #e0e0e0;
+          font-size: 14px;
+          margin: 0;
+        }
+        
+        .error-message {
+          background-color: rgba(239, 68, 68, 0.1);
+          color: #ef4444;
+          padding: 10px;
+          border-radius: 6px;
+          margin-top: 12px;
+          font-size: 14px;
+          text-align: center;
         }
       `}</style>
     </>

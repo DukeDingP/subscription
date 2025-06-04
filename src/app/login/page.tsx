@@ -1,16 +1,27 @@
 'use client';
 
-import { useState } from 'react';
-import { signIn } from 'next-auth/react';
+import { useState, useEffect } from 'react';
+import { signIn, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { data: session, status } = useSession();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState('example@email.com');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [pageLoaded, setPageLoaded] = useState(false);
+  
+  // 检查用户是否已登录，如果已登录则重定向到首页
+  useEffect(() => {
+    if (status === 'authenticated' && session) {
+      router.push('/');
+    } else {
+      setPageLoaded(true);
+    }
+  }, [session, status, router]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -57,11 +68,22 @@ export default function LoginPage() {
     }
   };
 
+  // 如果页面正在加载或检查会话状态，显示加载状态
+  if (!pageLoaded) {
+    return (
+      <div className="login-page">
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="login-page">
       <div className="login-container">
         <div className="login-header">
-          <h1>Welcome Back</h1>
+          <h1>欢迎回来</h1>
           <p>登录您的账户以继续</p>
         </div>
         
@@ -72,11 +94,11 @@ export default function LoginPage() {
                 id="email"
                 name="email"
                 type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
-              className="input-field"
-              placeholder="your@email.com"
+                className="input-field"
+                placeholder="your@email.com"
               />
           </div>
           
@@ -91,11 +113,11 @@ export default function LoginPage() {
                 id="password"
                 name="password"
                 type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 required
-              className="input-field"
-              placeholder="••••••••"
+                className="input-field"
+                placeholder="••••••••"
               />
           </div>
 
@@ -104,7 +126,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-            className="login-button"
+              className="login-button"
             >
               {loading ? '登录中...' : '登录'}
             </button>
@@ -164,6 +186,27 @@ export default function LoginPage() {
           justify-content: center;
           background-color: #121212;
           padding: 20px;
+        }
+        
+        .loading-container {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          height: 100vh;
+        }
+        
+        .loading-spinner {
+          width: 40px;
+          height: 40px;
+          border: 4px solid rgba(255, 154, 60, 0.1);
+          border-radius: 50%;
+          border-top: 4px solid #FF9A3C;
+          animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
         }
         
         .login-container {
