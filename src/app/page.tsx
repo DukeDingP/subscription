@@ -129,11 +129,11 @@ export default function Home() {
       setIsGenerating(true);
       setError(null);
       
-      // 非会员生成图像时增加一些延迟，模拟更慢的生成速度
-      if (!hasSubscription) {
-        // 在API调用前增加2-4秒的延迟
-        await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 2000));
-      }
+      // // 非会员生成图像时增加一些延迟，模拟更慢的生成速度
+      // if (!hasSubscription) {
+      //   // 在API调用前增加2-4秒的延迟
+      //   await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 2000));
+      // }
       
       // 调用Next.js API代理路由
       const response = await fetch(`/api/generate?prompt=${encodeURIComponent(prompt)}${highQuality ? '&highQuality=true' : ''}`);
@@ -147,8 +147,8 @@ export default function Home() {
       
       if (data.status === 'success') {
         // 将Base64编码的图像转换为可显示的URL
-        const imageUrls = data.images.map((base64: string) => `data:image/webp;base64,${base64}`);
-        setImages(imageUrls);
+       // const imageUrls = data.images.map((base64: string) => `data:image/webp;base64,${base64}`);
+        setImages(data.image_urls);
       } else {
         throw new Error(data.detail || '生成图像失败');
       }
@@ -704,7 +704,7 @@ export default function Home() {
               <h3>1. Introduction</h3>
               <p>At Lalaland, we take your privacy seriously. This Privacy Policy explains how we collect, use, and protect your information when you use our AI image generation service at Lalaland.app ("the Service").</p>
               
-              <h3>2. Information We Don't Collect</h3>
+              <h3>2. Information We don&apos Collect</h3>
               <p>We are committed to minimal data collection. We do not:</p>
               <ul>
                 <li>Require user registration or accounts</li>
@@ -743,7 +743,7 @@ export default function Home() {
               <p>We may update this Privacy Policy from time to time. We will notify users of any material changes by posting the new Privacy Policy on this page.</p>
               
               <h3>9. Your Rights</h3>
-              <p>Since we don't collect personal data, there is typically no user data to:</p>
+              <p>Since we don&apos collect personal data, there is typically no user data to:</p>
               <ul>
                 <li>Access</li>
                 <li>Correct</li>

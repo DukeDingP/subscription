@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     const url = `${apiUrl}/generate?prompt=${encodeURIComponent(prompt)}${highQuality ? '&highQuality=true' : ''}`;
     
     // 转发请求到Flask后端
+    console.log('url:', url);
     const response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
     });
     
     // 获取响应数据
+    console.log(response);
     const data = await response.json();
     
     // 返回响应
